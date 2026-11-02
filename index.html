@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fake Job Post Detector</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #eef2f6;
+    --surface: #ffffff;
+    --ink: #14233a;
+    --muted: #5b6b80;
+    --line: #cfd8e3;
+    --accent: #1f4fd8;
+    --safe: #0f7b4f;
+    --safe-bg: #e3f5ec;
+    --risk: #b42318;
+    --risk-bg: #fdeceb;
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e1622;
+      --surface: #16212f;
+      --ink: #e8eef6;
+      --muted: #9aabbf;
+      --line: #2a3a50;
+      --accent: #6f95ff;
+      --safe: #4ad49b;
+      --safe-bg: #123226;
+      --risk: #ff8a80;
+      --risk-bg: #3a1a18;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Source Sans 3", system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 17px;
+    line-height: 1.5;
+  }
+  main {
+    max-width: 1040px;
+    margin: 0 auto;
+    padding: 40px 20px 64px;
+  }
+  header { margin-bottom: 28px; max-width: 640px; }
+  h1 {
+    font-family: "Bricolage Grotesque", system-ui, sans-serif;
+    font-weight: 800;
+    font-size: clamp(2rem, 5vw, 3rem);
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    margin: 0 0 10px;
+  }
+  header p { margin: 0; color: var(--muted); }
+
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+    gap: 24px;
+    align-items: start;
+  }
+  @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+
+  form, .result {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 24px;
+  }
+  .field { margin-bottom: 18px; }
+  label, .legend {
+    display: block;
+    font-weight: 600;
+    font-size: 0.95rem;
+    margin-bottom: 6px;
+  }
+  .hint { font-weight: 400; color: var(--muted); }
+  input[type="text"], textarea, select {
+    width: 100%;
+    font: inherit;
+    color: var(--ink);
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 10px 12px;
+  }
+  textarea { resize: vertical; min-height: 96px; }
+  input:focus-visible, textarea:focus-visible, select:focus-visible,
+  button:focus-visible {
+    outline: 3px solid var(--accent);
+    outline-offset: 1px;
+  }
+  .row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  @media (max-width: 620px) { .row { grid-template-columns: 1fr; } }
+
+  fieldset { border: 0; padding: 0; margin: 0 0 22px; }
+  .checks { display: flex; flex-direction: column; gap: 8px; }
+  .checks label {
+    display: flex; align-items: center; gap: 10px;
+    font-weight: 400; margin: 0; cursor: pointer;
+  }
+  .checks input { width: 18px; height: 18px; accent-color: var(--accent); }
+
+  button {
+    font: inherit;
+    font-weight: 600;
+    color: #fff;
+    background: var(--accent);
+    border: 0;
+    border-radius: 6px;
+    padding: 12px 22px;
+    cursor: pointer;
+  }
+  @media (prefers-color-scheme: dark) { button { color: #0e1622; } }
+  button:disabled { opacity: 0.6; cursor: progress; }
+  .secondary {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--line);
+    margin-left: 8px;
+  }
+  @media (prefers-color-scheme: dark) { .secondary { color: var(--muted); } }
+
+  .result { position: sticky; top: 20px; min-height: 220px; }
+  .result h2 {
+    font-family: "Bricolage Grotesque", system-ui, sans-serif;
+    font-size: 1.1rem;
+    margin: 0 0 14px;
+  }
+  .empty { color: var(--muted); margin: 0; }
+  .verdict {
+    border-radius: var(--radius);
+    padding: 18px;
+    margin-bottom: 16px;
+  }
+  .verdict strong {
+    display: block;
+    font-family: "Bricolage Grotesque", system-ui, sans-serif;
+    font-size: 1.6rem;
+    line-height: 1.1;
+    margin-bottom: 4px;
+  }
+  .verdict.safe { background: var(--safe-bg); color: var(--safe); }
+  .verdict.risk { background: var(--risk-bg); color: var(--risk); }
+  .meter {
+    height: 10px;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 99px;
+    overflow: hidden;
+  }
+  .meter span {
+    display: block; height: 100%;
+    width: 0;
+    transition: width 0.5s ease;
+  }
+  .meter.safe span { background: var(--safe); }
+  .meter.risk span { background: var(--risk); }
+  .meter-label { display: flex; justify-content: space-between; color: var(--muted); font-size: 0.9rem; margin-top: 6px; }
+  .note { color: var(--muted); font-size: 0.9rem; margin: 14px 0 0; }
+  .error { color: var(--risk); background: var(--risk-bg); border-radius: 6px; padding: 12px; margin: 0; }
+  @media (prefers-reduced-motion: reduce) { .meter span { transition: none; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Is this job post real?</h1>
+    <p>Paste the details of a job listing and the model estimates how likely it is to be fraudulent.</p>
+  </header>
+
+  <div class="layout">
+    <form id="form">
+      <div class="field">
+        <label for="title">Job title</label>
+        <input type="text" id="title" required placeholder="e.g. Data Entry Clerk, work from home">
+      </div>
+      <div class="field">
+        <label for="company_profile">Company profile <span class="hint">(optional)</span></label>
+        <textarea id="company_profile"></textarea>
+      </div>
+      <div class="field">
+        <label for="description">Job description <span class="hint">(optional)</span></label>
+        <textarea id="description"></textarea>
+      </div>
+      <div class="field">
+        <label for="requirements">Requirements <span class="hint">(optional)</span></label>
+        <textarea id="requirements"></textarea>
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label for="employment_type">Employment type</label>
+          <select id="employment_type">
+            <option>Unknown</option>
+            <option>Full-time</option>
+            <option>Part-time</option>
+            <option>Contract</option>
+            <option>Temporary</option>
+            <option>Other</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="required_experience">Experience</label>
+          <select id="required_experience">
+            <option>Unknown</option>
+            <option>Internship</option>
+            <option>Entry level</option>
+            <option>Associate</option>
+            <option>Mid-Senior level</option>
+            <option>Director</option>
+            <option>Executive</option>
+            <option>Not Applicable</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="required_education">Education</label>
+          <select id="required_education">
+            <option>Unknown</option>
+            <option>Unspecified</option>
+            <option>High School or equivalent</option>
+            <option>Vocational</option>
+            <option>Certification</option>
+            <option>Some College Coursework Completed</option>
+            <option>Associate Degree</option>
+            <option>Bachelor's Degree</option>
+            <option>Master's Degree</option>
+            <option>Professional</option>
+            <option>Doctorate</option>
+          </select>
+        </div>
+      </div>
+
+      <fieldset>
+        <span class="legend">This listing…</span>
+        <div class="checks">
+          <label><input type="checkbox" id="telecommuting"> allows remote work</label>
+          <label><input type="checkbox" id="has_company_logo"> shows a company logo</label>
+          <label><input type="checkbox" id="has_questions"> includes screening questions</label>
+        </div>
+      </fieldset>
+
+      <button type="submit" id="submit">Check this job post</button>
+      <button type="reset" class="secondary" id="reset">Clear</button>
+    </form>
+
+    <aside class="result" aria-live="polite">
+      <h2>Result</h2>
+      <div id="output">
+        <p class="empty">Fill in the form and select “Check this job post” to see a result.</p>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<script>
+  const form = document.getElementById("form");
+  const output = document.getElementById("output");
+  const submitBtn = document.getElementById("submit");
+
+  const val = id => document.getElementById(id).value.trim();
+  const flag = id => document.getElementById(id).checked ? 1 : 0;
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const payload = {
+      title: val("title"),
+      company_profile: val("company_profile"),
+      description: val("description"),
+      requirements: val("requirements"),
+      employment_type: val("employment_type"),
+      required_experience: val("required_experience"),
+      required_education: val("required_education"),
+      telecommuting: flag("telecommuting"),
+      has_company_logo: flag("has_company_logo"),
+      has_questions: flag("has_questions")
+    };
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Checking…";
+
+    try {
+      const res = await fetch("/predict", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error("The server returned an error (" + res.status + ").");
+      const data = await res.json();
+
+      // Supports both the current (misspelled) and corrected key names
+      const fraud = data.fradulent ?? data.fraudulent;
+      const prob = data.pobability ?? data.probability;
+      render(Boolean(fraud), Number(prob));
+    } catch (err) {
+      output.innerHTML = "";
+      const p = document.createElement("p");
+      p.className = "error";
+      p.textContent = "Could not get a result. " + err.message;
+      output.appendChild(p);
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Check this job post";
+    }
+  });
+
+  document.getElementById("reset").addEventListener("click", () => {
+    output.innerHTML = '<p class="empty">Fill in the form and select “Check this job post” to see a result.</p>';
+  });
+
+  function render(fraud, prob) {
+    const pct = Math.round(prob * 100);
+    const cls = fraud ? "risk" : "safe";
+    output.innerHTML = `
+      <div class="verdict ${cls}">
+        <strong>${fraud ? "Likely fake" : "Likely genuine"}</strong>
+        ${fraud ? "This post matches patterns seen in fraudulent listings." : "This post does not match common fraud patterns."}
+      </div>
+      <div class="meter ${cls}" role="img" aria-label="Fraud probability ${pct} percent">
+        <span></span>
+      </div>
+      <div class="meter-label"><span>Fraud probability</span><span>${pct}%</span></div>
+      <p class="note">This is a statistical estimate, not proof. Verify the employer independently before sharing personal or financial details.</p>
+    `;
+    requestAnimationFrame(() => {
+      output.querySelector(".meter span").style.width = pct + "%";
+    });
+  }
+</script>
+</body>
+</html>
